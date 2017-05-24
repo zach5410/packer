@@ -73,6 +73,15 @@ func (p *PostProcessor) Configure(raws ...interface{}) error {
 	}
 
 	var errs *packer.MultiError
+
+	if p.config.Type == "vagrant.box" {
+		errs = packer.MultiErrorAppend(
+			errs, fmt.Errorf("DEPRECATION WARNNG: vagrant.box will soon be deprecated for Atlas, "+
+				"which means that soon you won't be able to push vagrant.box vm types to Atlas. "+
+				"Please see https://www.vagrantup.com/docs/vagrant-cloud/vagrant-cloud-migration.html "+
+				"for more details about how we are migrating the Vagrant Cloud product out of "+
+				"Atlas/Terraform Enterprise."))
+	}
 	for key, ptr := range required {
 		if *ptr == "" {
 			errs = packer.MultiErrorAppend(
