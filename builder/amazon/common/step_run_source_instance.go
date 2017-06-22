@@ -136,6 +136,21 @@ func (s *StepRunSourceInstance) Run(state multistep.StateBag) multistep.StepActi
 
 	var instanceId string
 
+	ReportTags(ui, ec2Tags)
+
+	ui.Say("Adding tags to source instance")
+	if _, exists := s.Tags["Name"]; !exists {
+		s.Tags["Name"] = "Packer Builder"
+	}
+
+	ec2Tags, err := ConvertToEC2Tags(s.Tags, *ec2conn.Config.Region, s.SourceAMI, s.Ctx)
+	if err != nil {
+		err := fmt.Errorf("Error tagging source instance: %s", err)
+		state.Put("error", err)
+		ui.Error(err.Error())
+		return multistep.ActionHalt
+	}
+
 	if spotPrice == "" || spotPrice == "0" {
 		runOpts := &ec2.RunInstancesInput{
 			ImageId:             &s.SourceAMI,
@@ -147,6 +162,7 @@ func (s *StepRunSourceInstance) Run(state multistep.StateBag) multistep.StepActi
 			BlockDeviceMappings: s.BlockDevices.BuildLaunchDevices(),
 			Placement:           &ec2.Placement{AvailabilityZone: &s.AvailabilityZone},
 			EbsOptimized:        &s.EbsOptimized,
+			TagSpecification:		 &ec2Tags
 		}
 
 		if keyName != "" {
@@ -278,37 +294,22 @@ func (s *StepRunSourceInstance) Run(state multistep.StateBag) multistep.StepActi
 
 	instance := latestInstance.(*ec2.Instance)
 
-	ui.Say("Adding tags to source instance")
-	if _, exists := s.Tags["Name"]; !exists {
-		s.Tags["Name"] = "Packer Builder"
-	}
-
-	ec2Tags, err := ConvertToEC2Tags(s.Tags, *ec2conn.Config.Region, s.SourceAMI, s.Ctx)
-	if err != nil {
-		err := fmt.Errorf("Error tagging source instance: %s", err)
-		state.Put("error", err)
-		ui.Error(err.Error())
-		return multistep.ActionHalt
-	}
-
-	ReportTags(ui, ec2Tags)
-
 	// Retry creating tags for about 2.5 minutes
-	err = retry.Retry(0.2, 30, 11, func(_ uint) (bool, error) {
-		_, err := ec2conn.CreateTags(&ec2.CreateTagsInput{
-			Tags:      ec2Tags,
-			Resources: []*string{instance.InstanceId},
-		})
-		if err == nil {
-			return true, nil
-		}
-		if awsErr, ok := err.(awserr.Error); ok {
-			if awsErr.Code() == "InvalidInstanceID.NotFound" {
-				return false, nil
-			}
-		}
-		return true, err
-	})
+	// err = retry.Retry(0.2, 30, 11, func(_ uint) (bool, error) {
+	// 	_, err := ec2conn.CreateTags(&ec2.CreateTagsInput{
+	// 		Tags:      ec2Tags,
+	// 		Resources: []*string{instance.InstanceId},
+	// 	})
+	// 	if err == nil {
+	// 		return true, nil
+	// 	}
+	// 	if awsErr, ok := err.(awserr.Error); ok {
+	// 		if awsErr.Code() == "InvalidInstanceID.NotFound" {
+	// 			return false, nil
+	// 		}
+	// 	}
+	// 	return true, err
+	// })
 
 	if err != nil {
 		err := fmt.Errorf("Error tagging source instance: %s", err)
